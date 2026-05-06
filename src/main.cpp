@@ -79,22 +79,39 @@ void on_center_button() {
  * All other competition modes are blocked by initialize; it is recommended
  * to keep execution time for this mode under a few seconds.
  */
-void initialize() {
-	pros::lcd::initialize();
-	pros::lcd::set_text(1, "Hello PROS User!");
-	
-	chassis.calibrate(); // calibrate sensors
-    // print position to brain screen
-    pros::Task screen_task([&]() {
+pros::AIVision aivision(13);
+
+void screen_task_function() {
+
+    aivision.enable_detection_types(pros::AivisionModeType::tags);
+    aivision.set_tag_family(pros::AivisionTagFamily::tag_21H7);
+
         while (true) {
             // print robot location to the brain screen
             pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
             pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
             pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading
-            // delay to save resources
-            pros::delay(20);
+            
+             auto objects = aivision.get_all_objects();
+        for (auto &object : objects) {
+            if (pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) {
+                pros::lcd::print(3,"tag\n");
+                pros::lcd::print(4, "id %d\n", object.id);
+                pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
+            }
         }
-    });
+        
+        pros::delay(50);
+    }
+}
+
+void initialize() {
+	pros::lcd::initialize();
+	pros::lcd::set_text(1, "Hello PROS User!");
+
+	chassis.calibrate(); // calibrate sensors
+    // print position to brain screen
+    static pros::Task screen_task = pros::Task(screen_task_function);
 
 	pros::lcd::register_btn1_cb(on_center_button);
 
@@ -146,7 +163,7 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	
+	    
 	while (true) {
 	
 		 // get left y and right x positions
