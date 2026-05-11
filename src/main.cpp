@@ -7,6 +7,9 @@
  * "I was pressed!" and nothing.
  */
 
+float Focal_Length = 172;
+float April_Tag_Size = 2+7/16;
+
 pros::MotorGroup left_motors({4, -5, 6}, pros::MotorGearset::blue); // left motors on ports 1, 2, 3
 pros::MotorGroup right_motors({-1, 2, -3}, pros::MotorGearset::blue); // right motors on ports 4, 5, 6
 pros::Controller controller(pros::E_CONTROLLER_MASTER); 
@@ -18,6 +21,8 @@ lemlib::Drivetrain drivetrain(&left_motors, // left motor group
                               360, // drivetrain rpm is 360
                               2 // horizontal drift is 2 (for now)
 );
+
+
 
 // create an imu on port 10
 pros::Imu imu(10);
@@ -85,19 +90,26 @@ void screen_task_function() {
 
     aivision.enable_detection_types(pros::AivisionModeType::tags);
     aivision.set_tag_family(pros::AivisionTagFamily::tag_21H7);
+    float width_of_tag;
 
-        while (true) {
-            // print robot location to the brain screen
-            pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
-            pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
-            pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading
+    while (true) {
+        // print robot location to the brain screen
+        pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
+        pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
+        pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading
             
-             auto objects = aivision.get_all_objects();
+        auto objects = aivision.get_all_objects();
+
         for (auto &object : objects) {
             if (pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) {
                 pros::lcd::print(3,"tag\n");
                 pros::lcd::print(4, "id %d\n", object.id);
                 pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
+                width_of_tag = (sqrt(std::pow(object.object.tag.y1-object.object.tag.y0,2)+std::pow(object.object.tag.x1-object.object.tag.x0,2)) + 
+                sqrt(std::pow(object.object.tag.y3-object.object.tag.y2,2)+std::pow(object.object.tag.x3-object.object.tag.x2,2))) / 2;
+                pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
+                pros::lcd::print(7, "distance: %f\n", Focal_Length * April_Tag_Size * 10/8.5 / width_of_tag);
+
             }
         }
         
