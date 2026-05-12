@@ -1,5 +1,5 @@
-#include "main.h"
-#include "lemlib/api.hpp"
+#include "main.h";
+#include "lemlib/api.hpp";
 /**
  * A callback function for LLEMU's center button.
  *
@@ -8,7 +8,35 @@
  */
 
 float Focal_Length = 172;
-float April_Tag_Size = 2+7/16;
+float April_Tag_Size = 2.0f+7/16.0f;
+
+//Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
+struct Tag_Detection
+{
+   float Distance_To_AprilTag_In;
+   float Robot_to_AprilTag_Angle;
+   float Pixel_width;
+   int Tag_ID;
+   bool Tag_Valid; 
+};
+
+Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
+    Tag_Detection Outcome;
+    Outcome.Tag_ID = AprilTag_Object.id;
+    auto& o = AprilTag_Object.object.object.tag;
+    float top       = std::hypot(o.x1-o.x0, o.y1-o.y0);  
+    float bottom    = std::hypot(o.x3-o.x2, o.y3-o.y2);
+    float left      = std::hypot(o.x0-o.x3, o.y0-o.y3);
+    float right     = std::hypot(o.x1-o.x2, o.y1-o.y2);         
+    float Average_Edge_Length = (top+bottom+left+right)/4.0f;
+    Outcome.Pixel_width = Average_Edge_Length;
+    Outcome.Distance_To_AprilTag_In = Focal_Length*April_Tag_Size/((top+bottom)/2.0f);
+    float Average_x_cord = (o.x0+o.x1+o.x2+o.x3)/4.0f;
+    Outcome.Robot_to_AprilTag_Angle = std::atan2(160 - Average_x_cord, Focal_Length);
+    Outcome.Tag_Valid = (Average_Edge_Length > 20);
+    return Outcome;
+}
+
 
 pros::MotorGroup left_motors({4, -5, 6}, pros::MotorGearset::blue); // left motors on ports 1, 2, 3
 pros::MotorGroup right_motors({-1, 2, -3}, pros::MotorGearset::blue); // right motors on ports 4, 5, 6
@@ -108,7 +136,7 @@ void screen_task_function() {
                 width_of_tag = (sqrt(std::pow(object.object.tag.y1-object.object.tag.y0,2)+std::pow(object.object.tag.x1-object.object.tag.x0,2)) + 
                 sqrt(std::pow(object.object.tag.y3-object.object.tag.y2,2)+std::pow(object.object.tag.x3-object.object.tag.x2,2))) / 2;
                 pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
-                pros::lcd::print(7, "distance: %f\n", Focal_Length * April_Tag_Size * 10/8.5 / width_of_tag);
+                pros::lcd::print(7, "distance: %f\n", Focal_Length * April_Tag_Size / width_of_tag);
 
             }
         }
