@@ -139,7 +139,6 @@ void initialize() {
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
-    chassis.setPose(0,0,0);
 
 }
 
@@ -175,8 +174,6 @@ void competition_initialize() {}
  */
 void autonomous() {
 
-    chassis.moveToPose(12,12,45,4000);
-
 }
 
 /**
@@ -202,9 +199,6 @@ void opcontrol() {
 
         // move the robot
         chassis.arcade(leftY, rightX);
-
-        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN) && controller.get_digital(pros::E_CONTROLLER_DIGITAL_B))
-            autonomous();
 
 		
         // delay to save resources
