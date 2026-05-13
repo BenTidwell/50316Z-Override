@@ -1,11 +1,5 @@
-#include "main.h";
-#include "lemlib/api.hpp";
-/**
- * A callback function for LLEMU's center button.
- *
- * When this callback is fired, it will toggle line 2 of the LCD text between
- * "I was pressed!" and nothing.
- */
+#include "main.h"
+#include "lemlib/api.hpp"
 
 float Focal_Length = 172;
 float April_Tag_Size = 2.0f+7/16.0f;
@@ -23,7 +17,7 @@ struct Tag_Detection
 Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Tag_Detection Outcome;
     Outcome.Tag_ID = AprilTag_Object.id;
-    auto& o = AprilTag_Object.object.object.tag;
+    auto& o = AprilTag_Object.object.tag;
     float top       = std::hypot(o.x1-o.x0, o.y1-o.y0);  
     float bottom    = std::hypot(o.x3-o.x2, o.y3-o.y2);
     float left      = std::hypot(o.x0-o.x3, o.y0-o.y3);
@@ -96,22 +90,6 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         sensors // odometry sensors
 );
 
-void on_center_button() {
-	static bool pressed = false;
-	pressed = !pressed;
-	if (pressed) {
-		pros::lcd::set_text(2, "I was pressed!");
-	} else {
-		pros::lcd::clear_line(2);
-	}
-}
-
-/**
- * Runs initialization code. This occurs as soon as the program is started.
- *
- * All other competition modes are blocked by initialize; it is recommended
- * to keep execution time for this mode under a few seconds.
- */
 pros::AIVision aivision(13);
 
 void screen_task_function() {
@@ -136,14 +114,22 @@ void screen_task_function() {
                 width_of_tag = (sqrt(std::pow(object.object.tag.y1-object.object.tag.y0,2)+std::pow(object.object.tag.x1-object.object.tag.x0,2)) + 
                 sqrt(std::pow(object.object.tag.y3-object.object.tag.y2,2)+std::pow(object.object.tag.x3-object.object.tag.x2,2))) / 2;
                 pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
-                pros::lcd::print(7, "distance: %f\n", Focal_Length * April_Tag_Size / width_of_tag);
-
+                Tag_Detection myTag = AprilTagProccesing(object);
+                pros::lcd::print(7, "distance: %f valid? %d\n", Focal_Length * April_Tag_Size / width_of_tag, myTag.Tag_Valid);
+                
             }
         }
         
         pros::delay(50);
     }
 }
+
+/**
+ * Runs initialization code. This occurs as soon as the program is started.
+ *
+ * All other competition modes are blocked by initialize; it is recommended
+ * to keep execution time for this mode under a few seconds.
+ */
 
 void initialize() {
 	pros::lcd::initialize();
@@ -153,7 +139,7 @@ void initialize() {
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
-	pros::lcd::register_btn1_cb(on_center_button);
+    chassis.setPose(0,0,0);
 
 }
 
@@ -187,7 +173,11 @@ void competition_initialize() {}
  * will be stopped. Re-enabling the robot will restart the task, not re-start it
  * from where it left off.
  */
-void autonomous() {}
+void autonomous() {
+
+    chassis.moveToPose(12,12,45,4000);
+
+}
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -203,7 +193,7 @@ void autonomous() {}
  * task, not resume it from where it left off.
  */
 void opcontrol() {
-	    
+
 	while (true) {
 	
 		 // get left y and right x positions
@@ -213,6 +203,8 @@ void opcontrol() {
         // move the robot
         chassis.arcade(leftY, rightX);
 
+        if(controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN) && controller.get_digital(pros::E_CONTROLLER_DIGITAL_B))
+            autonomous();
 
 		
         // delay to save resources
