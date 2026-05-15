@@ -31,7 +31,6 @@ Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     return Outcome;
 }
 
-
 pros::MotorGroup left_motors({4, -5, 6}, pros::MotorGearset::blue); // left motors on ports 1, 2, 3
 pros::MotorGroup right_motors({-1, 2, -3}, pros::MotorGearset::blue); // right motors on ports 4, 5, 6
 pros::Controller controller(pros::E_CONTROLLER_MASTER); 
@@ -43,7 +42,6 @@ lemlib::Drivetrain drivetrain(&left_motors, // left motor group
                               360, // drivetrain rpm is 360
                               2 // horizontal drift is 2 (for now)
 );
-
 
 
 // create an imu on port 10
@@ -110,10 +108,10 @@ void screen_task_function() {
             if (pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) {
                 pros::lcd::print(3,"tag\n");
                 pros::lcd::print(4, "id %d\n", object.id);
-                pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
+                // pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
                 width_of_tag = (sqrt(std::pow(object.object.tag.y1-object.object.tag.y0,2)+std::pow(object.object.tag.x1-object.object.tag.x0,2)) + 
                 sqrt(std::pow(object.object.tag.y3-object.object.tag.y2,2)+std::pow(object.object.tag.x3-object.object.tag.x2,2))) / 2;
-                pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
+                // pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
                 Tag_Detection myTag = AprilTagProccesing(object);
                 pros::lcd::print(7, "distance: %f valid? %d\n", Focal_Length * April_Tag_Size / width_of_tag, myTag.Tag_Valid);
                 
@@ -132,16 +130,16 @@ void screen_task_function() {
  */
 
 void initialize() {
-	pros::lcd::initialize();
-	pros::lcd::set_text(1, "Hello PROS User!");
+    pros::lcd::initialize();
+    pros::lcd::set_text(1, "Hello PROS User!");
 
-	chassis.calibrate(); // calibrate sensors
+    chassis.calibrate(); // calibrate sensors
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
+    chassis.setPose (0,0,0);
 
 }
-
 
 /**
  * Runs while the robot is in the disabled state of Field Management System or
@@ -173,7 +171,17 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
+    float delta_y;
+    float delta_x;
+    auto objects = aivision.get_all_objects();
+    Tag_Detection myTag = AprilTagProccesing(objects[0]);
 
+    delta_y = myTag.Distance_To_AprilTag_In*sin(90-chassis.getPose().theta-myTag.Robot_to_AprilTag_Angle);
+    delta_x = myTag.Distance_To_AprilTag_In*cos(90-chassis.getPose().theta-myTag.Robot_to_AprilTag_Angle);
+    pros::lcd::print(5, "%f %f %f\n", chassis.getPose().x, chassis.getPose().y, myTag.Distance_To_AprilTag_In);
+    pros::lcd::print(6, "%f %f %f\n", delta_x, delta_y, myTag.Robot_to_AprilTag_Angle);
+
+    chassis.moveToPose(chassis.getPose().x+delta_x, chassis.getPose().y+delta_y-10, 0, 5000);
 }
 
 /**
@@ -191,17 +199,23 @@ void autonomous() {
  */
 void opcontrol() {
 
-	while (true) {
-	
-		 // get left y and right x positions
+    while (true) {
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B) && 
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
+                autonomous();
+        }
+        
+        
+        // get left y and right x positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
 
         // move the robot
         chassis.arcade(leftY, rightX);
 
-		
+        
         // delay to save resources
         pros::delay(25);                            // Run for 20 ms then update
-	}
+    }
 }
+
