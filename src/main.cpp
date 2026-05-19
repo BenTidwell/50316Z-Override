@@ -175,13 +175,18 @@ void autonomous() {
     float delta_x;
     auto objects = aivision.get_all_objects();
     Tag_Detection myTag = AprilTagProccesing(objects[0]);
+    if(objects.empty()) {
+        pros::lcd::print(5, "No tag detected");
+        return;
+    }
 
-    delta_y = myTag.Distance_To_AprilTag_In*sin(90-chassis.getPose().theta-myTag.Robot_to_AprilTag_Angle);
-    delta_x = myTag.Distance_To_AprilTag_In*cos(90-chassis.getPose().theta-myTag.Robot_to_AprilTag_Angle);
-    pros::lcd::print(5, "%f %f %f\n", chassis.getPose().x, chassis.getPose().y, myTag.Distance_To_AprilTag_In);
+    
+    delta_y = myTag.Distance_To_AprilTag_In*sin(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
+    delta_x = myTag.Distance_To_AprilTag_In*cos(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
+    pros::lcd::print(5, "%f %f %f\n", chassis.getPose(true,true).x, chassis.getPose(true,true).y, myTag.Distance_To_AprilTag_In);
     pros::lcd::print(6, "%f %f %f\n", delta_x, delta_y, myTag.Robot_to_AprilTag_Angle);
 
-    chassis.moveToPose(chassis.getPose().x+delta_x, chassis.getPose().y+delta_y-10, 0, 5000);
+    chassis.moveToPose(chassis.getPose(true,true).x+delta_x, chassis.getPose(true,true).y+delta_y-10, 0, 5000);
 }
 
 /**
