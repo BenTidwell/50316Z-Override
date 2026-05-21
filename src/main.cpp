@@ -2,7 +2,7 @@
 #include "lemlib/api.hpp"
 
 float Focal_Length = 172;
-float April_Tag_Size = 2.0f+7/16.0f;
+float April_Tag_Size = 1.0f;
 
 //Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
 struct Tag_Detection
