@@ -26,7 +26,7 @@ Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Outcome.Pixel_width = Average_Edge_Length;
     Outcome.Distance_To_AprilTag_In = Focal_Length*April_Tag_Size/((top+bottom)/2.0f);
     float Average_x_cord = (o.x0+o.x1+o.x2+o.x3)/4.0f;
-    Outcome.Robot_to_AprilTag_Angle = std::atan2(160 - Average_x_cord, Focal_Length);
+    Outcome.Robot_to_AprilTag_Angle = lemlib::radToDeg(std::atan2(Average_x_cord - 160, Focal_Length));
     Outcome.Tag_Valid = (Average_Edge_Length > 20);
     return Outcome;
 }
@@ -114,6 +114,7 @@ void screen_task_function() {
                 // pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
                 Tag_Detection myTag = AprilTagProccesing(object);
                 pros::lcd::print(7, "distance: %f valid? %d\n", Focal_Length * April_Tag_Size / width_of_tag, myTag.Tag_Valid);
+                // pros::lcd::print(7, "Robot to April Tag Angle: %f", myTag.Robot_to_AprilTag_Angle);
                 
             }
         }
@@ -182,12 +183,14 @@ void autonomous() {
 
     Tag_Detection myTag = AprilTagProccesing(objects[0]);
     
-    delta_y = myTag.Distance_To_AprilTag_In*sin(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
-    delta_x = myTag.Distance_To_AprilTag_In*cos(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
-    pros::lcd::print(5, "%f %f %f\n", chassis.getPose(true,true).x, chassis.getPose(true,true).y, myTag.Distance_To_AprilTag_In);
-    pros::lcd::print(6, "%f %f %f\n", delta_x, delta_y, myTag.Robot_to_AprilTag_Angle);
+    
 
-    chassis.moveToPose(chassis.getPose(true,true).x+delta_x, chassis.getPose(true,true).y+delta_y-10, 0, 5000);
+    delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle));
+    delta_y = myTag.Distance_To_AprilTag_In*cos(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle));
+    pros::lcd::print(5, "x:%.2f  y:%.2f  start_dist:%.2f\n", roundf(100*chassis.getPose().x)/100, roundf(100*chassis.getPose().y)/100, roundf(100*myTag.Distance_To_AprilTag_In)/100);
+    pros::lcd::print(6, "d_x:%.2f  d_y:%.2f  delta_angle:%.2f\n", roundf(100*delta_x)/100, roundf(100*delta_y)/100, roundf(100*myTag.Robot_to_AprilTag_Angle)/100);
+
+    chassis.moveToPose(chassis.getPose().x+delta_x, chassis.getPose().y+delta_y-10, 0, 5000);
 }
 
 /**
