@@ -174,12 +174,13 @@ void autonomous() {
     float delta_y;
     float delta_x;
     auto objects = aivision.get_all_objects();
-    Tag_Detection myTag = AprilTagProccesing(objects[0]);
+    
     if(objects.empty()) {
         pros::lcd::print(5, "No tag detected");
         return;
     }
 
+    Tag_Detection myTag = AprilTagProccesing(objects[0]);
     
     delta_y = myTag.Distance_To_AprilTag_In*sin(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
     delta_x = myTag.Distance_To_AprilTag_In*cos(chassis.getPose(true,true).theta+myTag.Robot_to_AprilTag_Angle);
