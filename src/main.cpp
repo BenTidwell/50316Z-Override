@@ -192,8 +192,14 @@ void autonomous() {
 
     Tag_Detection myTag = AprilTagProccesing(objects[0]);
 
-    delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle));
-    delta_y = myTag.Distance_To_AprilTag_In*cos(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle));
+    //This finds the delta x that is needed to move the vision sensor to the target
+    delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
+                //This translates the AI vision sensor point into the robots center using a x and a y offset 
+                cos(lemlib::degToRad(chassis.getPose().theta)*AprilTag_X_offset) + 
+                sin(lemlib::degToRad(chassis.getPose().theta)*AprilTag_Y_offset);
+    delta_y = myTag.Distance_To_AprilTag_In*cos(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
+                cos(lemlib::degToRad(chassis.getPose().theta)*AprilTag_Y_offset) - 
+                sin(lemlib::degToRad(chassis.getPose().theta)*AprilTag_X_offset);
 
     pros::lcd::print(5, "a_x:%.2f  a_y:%.2f  start_dist:%.2f\n", roundf(100*chassis.getPose().x)/100, roundf(100*chassis.getPose().y)/100, roundf(100*myTag.Distance_To_AprilTag_In)/100);
     pros::lcd::print(6, "dx:%.2f  dy:%.2f  d_angle:%.2f\n", roundf(100*delta_x)/100, roundf(100*delta_y)/100, roundf(100*myTag.Robot_to_AprilTag_Angle)/100);
