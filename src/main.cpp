@@ -3,7 +3,7 @@
 
 float Focal_Length = 172;
 float April_Tag_Size = 1.0f;
-float AprilTag_Angle_Trim = lemlib::degToRad(3.66);  // adjust for difference in angle between robot and sensor
+float AprilTag_Angle_Trim =  lemlib::degToRad(0); // lemlib::degToRad(3.66);  // adjust for difference in angle between robot and sensor
 
 //Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
 struct Tag_Detection
@@ -32,28 +32,34 @@ Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     return Outcome;
 }
 
-pros::MotorGroup left_motors({4, -5, 6}, pros::MotorGearset::blue); // left motors on ports 1, 2, 3
-pros::MotorGroup right_motors({-1, 2, -3}, pros::MotorGearset::blue); // right motors on ports 4, 5, 6
+pros::MotorGroup left_motors({-2,-6}, pros::MotorGearset::blue); // left motors on ports 2 and 6
+pros::MotorGroup right_motors({9,5}, pros::MotorGearset::blue); // right motors on ports 5 and 9
 pros::Controller controller(pros::E_CONTROLLER_MASTER); 
 // drivetrain settings
 lemlib::Drivetrain drivetrain(&left_motors, // left motor group
                               &right_motors, // right motor group
                               10, // 10 inch track width
-                              lemlib::Omniwheel::NEW_325, // using new 3.25" omnis
-                              360, // drivetrain rpm is 360
+                              lemlib::Omniwheel::NEW_275, // using new 3.25" omnis
+                              450, // drivetrain rpm is 450
                               2 // horizontal drift is 2 (for now)
 );
 
+pros::MotorGroup liftMotors({-3,8}, pros::MotorGearset::green);
+pros::Motor wristMotor({4}, pros::MotorGearset::green);
 
-// create an imu on port 10
-pros::Imu imu(10);
-// create a v5 rotation sensor on port 9
-pros::Rotation rotation_sensor(-9);
+// create an imu on port 15
+pros::Imu imu(15);
+// create a v5 rotation sensor on ports 19 & 20
+pros::Rotation vert_rotation_sensor(19);
+pros::Rotation horv_rotation_sensor(20);
 // vertical tracking wheel
-lemlib::TrackingWheel vertical_tracking_wheel(&rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
+lemlib::TrackingWheel vertical_tracking_wheel(&vert_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horv_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
+
+
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
                             nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
-                            nullptr, // horizontal tracking wheel 1
+                            &horizontal_tracking_wheel, // horizontal tracking wheel 1
                             nullptr, // horizontal tracking wheel 2, set to nullptr as we don't have a second one
                             &imu // inertial sensor
 );
@@ -89,7 +95,7 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         sensors // odometry sensors
 );
 
-pros::AIVision aivision(13);
+pros::AIVision aivision(10);
 
 void screen_task_function() {
 
@@ -181,13 +187,29 @@ void competition_initialize() {}
 void autonomous() {
     float delta_y;
     float delta_x;
-    auto objects = aivision.get_all_objects();
-    
-    if(objects.empty()) {
-        pros::lcd::print(5, "No tag detected");
-        return;
-    }
 
+    chassis.moveToPose(-10,-25, 0, 3000, {.forwards = false}); // 
+    chassis.waitUntilDone();
+    
+    pros::delay(250);
+
+    auto objects = aivision.get_all_objects();
+        
+
+    for(int i=0;i<10;i++){
+        if(!objects.empty()) {
+            break;
+        }    
+
+        if(i == 9) {
+        pros::lcd::print(5, "We never found the tag");    
+        return;
+        }
+        pros::delay(50);
+        auto objects = aivision.get_all_objects();
+
+    }
+ 
     Tag_Detection myTag = AprilTagProccesing(objects[0]);
 
     delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle));
@@ -196,8 +218,10 @@ void autonomous() {
     pros::lcd::print(5, "a_x:%.2f  a_y:%.2f  start_dist:%.2f\n", roundf(100*chassis.getPose().x)/100, roundf(100*chassis.getPose().y)/100, roundf(100*myTag.Distance_To_AprilTag_In)/100);
     pros::lcd::print(6, "dx:%.2f  dy:%.2f  d_angle:%.2f\n", roundf(100*delta_x)/100, roundf(100*delta_y)/100, roundf(100*myTag.Robot_to_AprilTag_Angle)/100);
 
-    chassis.setPose(72-delta_x, 72-2.5-delta_y, chassis.getPose().theta);
-    chassis.moveToPose(72,61, 0, 3000);
+    chassis.setPose(-72+delta_x,-72+2.5+delta_y, chassis.getPose().theta);
+    chassis.moveToPose(-72,-70, 0, 3000, {.forwards = false});
+
+    
 }
 
 /**
@@ -229,6 +253,22 @@ void opcontrol() {
         // move the robot
         chassis.arcade(leftY, rightX);
 
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
+            liftMotors.move(127); // Move full speed up
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            liftMotors.move(-127); // Move full speed down
+        } else {
+            liftMotors.move(0); // Stop moving motors
+        }
+
+         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
+            wristMotor.move(127); // Move full speed up
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
+            wristMotor.move(-127); // Move full speed down
+        } else {
+            wristMotor.move(0); // Stop moving motors
+        }
         
         // delay to save resources
         pros::delay(25);                            // Run for 20 ms then update
