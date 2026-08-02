@@ -1,11 +1,17 @@
 #include "main.h"
 #include "lemlib/api.hpp"
+#define ALIGN_DIST 10;
+#define SCORING_DIST 1.75;
+#define NORTH 1
+#define EAST 2
+#define SOUTH 3
+#define WEST 4
 
 float Focal_Length = 172; //Constant for AprilTag proccesing
 float April_Tag_Size = 1.0f; //This describes what the size in inches the AprilTag is, as it can change in size every year
-float AprilTag_Angle_Trim = lemlib::degToRad(0);  // adjust for difference in angle between robot and sensor
-float AprilTag_X_offset = 0.5f;
-float AprilTag_Y_offset =  7.0f;
+float AprilTag_Angle_Trim = lemlib::degToRad(3.8);  // adjust for difference in angle between robot and sensor
+float AprilTag_X_offset = 0.0f;
+float AprilTag_Y_offset =  -2.0f;
 
 //Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
 struct Tag_Detection
@@ -16,6 +22,30 @@ struct Tag_Detection
    int Tag_ID;
    bool Tag_Valid; 
 };
+
+//Structure that we will use for moving to each goal using AprilTags
+struct Goal_Info
+{
+    float Goal_x;
+    float Goal_y;
+    float Goal_Height;
+    int Goal_AprilTag_Number;
+};
+
+Goal_Info goals[9] = {
+    {70.20,70.20,8.77,0},
+    {23.11,93.75,5.77,1},
+    {23.11,46.66,3.25,2},
+    {46.66,23.11,3.25,3},
+    {93.75,23.11,5.77,4},
+    {117.30,46.66,5.77,1},
+    {117.30,93.75,3.25,2},
+    {93.75,117.30,3.25,3},
+    {46.66,117.30,5.77,4}
+};
+
+
+
 
 Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Tag_Detection Outcome;
@@ -48,9 +78,12 @@ lemlib::Drivetrain drivetrain(&left_motors, // left motor group
 
 pros::MotorGroup liftMotors({-3,8}, pros::MotorGearset::green);
 pros::Motor wristMotor({4}, pros::MotorGearset::green);
+pros::Motor Scoring_Rollers({18}, pros::MotorGearset::green);
+
 
 // create an imu on port 15
 pros::Imu imu(15);
+pros::Distance scoring_dist_sensor(5); 
 // create a v5 rotation sensor on ports 19 & 20
 pros::Rotation vert_rotation_sensor(19);
 pros::Rotation horv_rotation_sensor(20);
@@ -123,10 +156,10 @@ void screen_task_function() {
                 if (pros::AIVision::is_type(object, pros::AivisionDetectType::tag)) {
                     pros::lcd::print(3,"tag\n");
                     pros::lcd::print(4, "id %d\n", object.id);
-                    // pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
+                    pros::lcd::print(5, "%d %d %d %d %d %d %d %d\n", object.object.tag.x0, object.object.tag.y0, object.object.tag.x1, object.object.tag.y1, object.object.tag.x2, object.object.tag.y2, object.object.tag.x3, object.object.tag.y3);
                     width_of_tag = (sqrt(std::pow(object.object.tag.y1-object.object.tag.y0,2)+std::pow(object.object.tag.x1-object.object.tag.x0,2)) + 
                     sqrt(std::pow(object.object.tag.y3-object.object.tag.y2,2)+std::pow(object.object.tag.x3-object.object.tag.x2,2))) / 2;
-                    // pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
+                    pros::lcd::print(6, "%f %f %f\n", Focal_Length, April_Tag_Size, width_of_tag);
                     Tag_Detection myTag = AprilTagProccesing(object);
                     pros::lcd::print(7, "distance: %.2f valid? %d RtTA: %.2f\n", Focal_Length * April_Tag_Size / width_of_tag, myTag.Tag_Valid,lemlib::radToDeg(myTag.Robot_to_AprilTag_Angle));
                     // pros::lcd::print(7, "Robot to April Tag Angle: %f", myTag.Robot_to_AprilTag_Angle);
@@ -145,9 +178,178 @@ void screen_task_function() {
  * to keep execution time for this mode under a few seconds.
  */
 
+void AprilTag_move_to_score(int goal_Number, int direction) {
+
+    float delta_y;
+    float delta_x;
+
+    int scoring_x = goals[goal_Number].Goal_x;
+    int scoring_y = goals[goal_Number].Goal_y;
+    int scoring_angle;
+    
+    //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
+    if(direction==NORTH){
+    scoring_y += SCORING_DIST;
+    scoring_angle = 0;
+    }
+    if(direction==SOUTH){
+    scoring_y -= SCORING_DIST;
+    scoring_angle = 180;
+    }
+    if(direction==EAST){
+    scoring_x += SCORING_DIST;
+    scoring_angle = 90;
+    }
+    if(direction==WEST){
+    scoring_x -= SCORING_DIST;
+    scoring_angle = -90;
+    }
+
+    auto objects = aivision.get_all_objects();
+        
+
+    for(int i=0;i<10;i++){
+        if(!objects.empty()) {
+            break;
+        }    
+
+        if(i == 9) {
+        pros::lcd::print(5, "We never found the tag");    
+        return;
+        }
+        pros::delay(50);
+        auto objects = aivision.get_all_objects();
+
+    }
+ 
+    Tag_Detection myTag = AprilTagProccesing(objects[0]);
+
+    //This finds the delta x that is needed to move the vision sensor to the target
+    delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
+                //This translates the AI vision sensor point into the robots center using a x and a y offset 
+                cos(lemlib::degToRad(chassis.getPose().theta))*AprilTag_X_offset + 
+                sin(lemlib::degToRad(chassis.getPose().theta))*AprilTag_Y_offset;
+    delta_y = myTag.Distance_To_AprilTag_In*cos(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
+                cos(lemlib::degToRad(chassis.getPose().theta))*AprilTag_Y_offset - 
+                sin(lemlib::degToRad(chassis.getPose().theta))*AprilTag_X_offset;
+
+    pros::lcd::print(5, "a_x:%.2f  a_y:%.2f  start_dist:%.2f\n", roundf(100*chassis.getPose().x)/100, roundf(100*chassis.getPose().y)/100, roundf(100*myTag.Distance_To_AprilTag_In)/100);
+    pros::lcd::print(6, "dx:%.2f  dy:%.2f  d_angle:%.2f\n", roundf(100*delta_x)/100, roundf(100*delta_y)/100, roundf(100*myTag.Robot_to_AprilTag_Angle)/100);
+
+    chassis.setPose(scoring_x+delta_x,scoring_y+delta_y, chassis.getPose().theta);
+    chassis.moveToPose(scoring_x,scoring_y, scoring_angle, 3000, {.forwards = false});
+    
+    
+}
+
+void Score_In_Goal(int goal_Number, int direction) {
+
+    int align_x = goals[goal_Number].Goal_x;
+    int align_y = goals[goal_Number].Goal_y;
+    int align_angle;
+    
+    //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
+    if(direction==NORTH){
+        align_y += ALIGN_DIST;
+        align_angle = 0;
+    }
+    if(direction==SOUTH){
+        align_y -= ALIGN_DIST;
+        align_angle = 180;
+    }
+    if(direction==EAST){
+        align_x += ALIGN_DIST;
+        align_angle = 90;
+    }
+    if(direction==WEST){
+        align_x -= ALIGN_DIST;
+        align_angle = -90;
+    }
+
+    chassis.moveToPose(align_x,align_y,align_angle,5000, {.forwards = false});
+    chassis.waitUntilDone();
+
+    /*wristMotor.move(127); // Move full speed up
+    pros::delay(500);  
+    wristMotor.move(0);
+    liftMotors.move(127);
+    while (scoring_dist_sensor.get_distance()>20) {
+
+        pros::delay(10);
+    }
+
+    pros::delay(1000);
+    liftMotors.move(0);
+    */
+
+    AprilTag_move_to_score(goal_Number, direction);
+
+    /*Scoring_Rollers.move(-127);
+    pros::delay(1000);
+    Scoring_Rollers.move(0);
+*/}
+
+extern const char* auto_names[] = {"auto_1", "auto_2"};
+extern const int auton_count = 2;
+extern int selected_auto = 0;
+
+void auto_1() {
+
+    //chassis.moveToPose(0, 40, 0, 3000);
+    //chassis.waitUntilDone();
+    chassis.setPose(61,-7,180);
+    Score_In_Goal(3,EAST);
+}
+
+void auto_2() {
+
+    chassis.turnToHeading(90, 3000);
+    chassis.waitUntilDone();
+    chassis.turnToHeading(0, 3000);
+    chassis.waitUntilDone();
+}
+
+void auton_selector() {
+
+    while (true)
+    {
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT))
+        {
+            selected_auto = (selected_auto - 1 + auton_count) % auton_count;
+            pros::delay(100);  
+        }
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT))
+        {
+            selected_auto = (selected_auto + 1) % auton_count;
+            pros::delay(100);
+        }
+        
+        //controller.clear();
+        //pros::delay(50);
+        controller.set_text(0,0, auto_names[selected_auto]);
+        
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_X) && 
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP)){
+            pros::delay(50);
+            controller.set_text(0,0,"The chosen:");
+            pros::delay(50);
+            controller.set_text(1,0, auto_names[selected_auto]);
+            return;
+            }
+    
+        pros::delay(50);  
+    }
+}
+
 void initialize() {
     pros::lcd::initialize();
-    pros::lcd::set_text(1, "Hello PROS User!");
+    //pros::lcd::set_text(1, "Hello PROS User!");
+
+    controller.clear();
+    pros::delay(50);                       
+    //controller.set_text(0,0,"Hi Andrew");
+    auton_selector();
 
     chassis.calibrate(); // calibrate sensors
     // print position to brain screen
@@ -187,50 +389,19 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
-    float delta_y;
-    float delta_x;
-
-    chassis.moveToPose(-10,-25, 0, 3000, {.forwards = false}); // 
-    chassis.waitUntilDone();
     
-    pros::delay(250);
-
-    auto objects = aivision.get_all_objects();
-        
-
-    for(int i=0;i<10;i++){
-        if(!objects.empty()) {
+    switch(selected_auto) {
+        case 0: 
+            auto_1();
             break;
-        }    
-
-        if(i == 9) {
-        pros::lcd::print(5, "We never found the tag");    
-        return;
-        }
-        pros::delay(50);
-        auto objects = aivision.get_all_objects();
+        case 1:
+            auto_2();
+            break;
+        default:
+            controller.set_text(0,0,"Err: Auto Sel");
 
     }
- 
-    Tag_Detection myTag = AprilTagProccesing(objects[0]);
-
-    //This finds the delta x that is needed to move the vision sensor to the target
-    delta_x = myTag.Distance_To_AprilTag_In*sin(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
-                //This translates the AI vision sensor point into the robots center using a x and a y offset 
-                cos(lemlib::degToRad(chassis.getPose().theta)*AprilTag_X_offset) + 
-                sin(lemlib::degToRad(chassis.getPose().theta)*AprilTag_Y_offset);
-    delta_y = myTag.Distance_To_AprilTag_In*cos(lemlib::degToRad(chassis.getPose().theta+myTag.Robot_to_AprilTag_Angle)) + 
-                cos(lemlib::degToRad(chassis.getPose().theta)*AprilTag_Y_offset) - 
-                sin(lemlib::degToRad(chassis.getPose().theta)*AprilTag_X_offset);
-
-    pros::lcd::print(5, "a_x:%.2f  a_y:%.2f  start_dist:%.2f\n", roundf(100*chassis.getPose().x)/100, roundf(100*chassis.getPose().y)/100, roundf(100*myTag.Distance_To_AprilTag_In)/100);
-    pros::lcd::print(6, "dx:%.2f  dy:%.2f  d_angle:%.2f\n", roundf(100*delta_x)/100, roundf(100*delta_y)/100, roundf(100*myTag.Robot_to_AprilTag_Angle)/100);
-
-    chassis.setPose(-72+delta_x,-72+2.5+delta_y, chassis.getPose().theta);
-    chassis.moveToPose(-72,-70, 0, 3000, {.forwards = false});
-
-    
-}
+}  
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -247,7 +418,18 @@ void autonomous() {
  */
 void opcontrol() {
 
+//controller.set_text(2,0,"Hi Andrew");
+//pros::delay(50);        
+//controller.set_text(1,0,auto_names[selected_auto]);
+
     while (true) {
+
+        Scoring_Rollers.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+        // controller.set_text(0,0,"The chosen: ");
+        //controller.set_text(2,0,"Hi Andrew");
+
+        //controller.set_text(1,0,auto_names[selected_auto]);       
+        
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B) && 
             controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
                 autonomous();
@@ -260,11 +442,18 @@ void opcontrol() {
 
         // move the robot
         chassis.arcade(leftY, rightX);
-
-
+/*
         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-            liftMotors.move(127); // Move full speed up
+            Scoring_Rollers.move(127); // Move full speed up
         } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
+            Scoring_Rollers.move(-127); // Move full speed down
+        } else {
+            Scoring_Rollers.move(0); // Stop moving motors
+        }
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP)) {
+            liftMotors.move(127); // Move full speed up
+        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)) {
             liftMotors.move(-127); // Move full speed down
         } else {
             liftMotors.move(0); // Stop moving motors
@@ -277,7 +466,7 @@ void opcontrol() {
         } else {
             wristMotor.move(0); // Stop moving motors
         }
-        
+  */     
         // delay to save resources
         pros::delay(25);                            // Run for 20 ms then update
     }
