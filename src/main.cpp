@@ -1,7 +1,7 @@
 #include "main.h"
 #include "lemlib/api.hpp"
-#define ALIGN_DIST 10;
-#define SCORING_DIST 1.75;
+#define ALIGN_DIST 10
+#define SCORING_DIST 1.75
 #define NORTH 1
 #define EAST 2
 #define SOUTH 3
@@ -12,16 +12,6 @@ float April_Tag_Size = 1.0f; //This describes what the size in inches the AprilT
 float AprilTag_Angle_Trim = lemlib::degToRad(3.8);  // adjust for difference in angle between robot and sensor
 float AprilTag_X_offset = 0.0f;
 float AprilTag_Y_offset =  -2.0f;
-
-//Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
-struct Tag_Detection
-{
-   float Distance_To_AprilTag_In;
-   float Robot_to_AprilTag_Angle;
-   float Pixel_width;
-   int Tag_ID;
-   bool Tag_Valid; 
-};
 
 //Structure that we will use for moving to each goal using AprilTags
 struct Goal_Info
@@ -44,8 +34,15 @@ Goal_Info goals[9] = {
     {46.66,117.30,5.77,4}
 };
 
-
-
+//Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
+struct Tag_Detection
+{
+   float Distance_To_AprilTag_In;
+   float Robot_to_AprilTag_Angle;
+   float Pixel_width;
+   int Tag_ID;
+   bool Tag_Valid; 
+};
 
 Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Tag_Detection Outcome;
@@ -71,7 +68,7 @@ pros::Controller controller(pros::E_CONTROLLER_MASTER);
 lemlib::Drivetrain drivetrain(&left_motors, // left motor group
                               &right_motors, // right motor group
                               10, // 10 inch track width
-                              lemlib::Omniwheel::NEW_275, // using new 3.25" omnis
+                              lemlib::Omniwheel::NEW_275, // using new 2.75" omnis
                               450, // drivetrain rpm is 450
                               2 // horizontal drift is 2 (for now)
 );
@@ -83,15 +80,19 @@ pros::Motor Scoring_Rollers({18}, pros::MotorGearset::green);
 
 // create an imu on port 15
 pros::Imu imu(15);
-pros::Distance scoring_dist_sensor(5); 
+// create distance sensor
+// pros::Distance scoring_dist_sensor(5); 
+
 // create a v5 rotation sensor on ports 19 & 20
 pros::Rotation vert_rotation_sensor(19);
 pros::Rotation horv_rotation_sensor(20);
-// vertical tracking wheel
+
+// create a vision sensor
+pros::AIVision aivision(10);
+
+// tracking wheels
 lemlib::TrackingWheel vertical_tracking_wheel(&vert_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
 lemlib::TrackingWheel horizontal_tracking_wheel(&horv_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
-
-
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
                             nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
                             &horizontal_tracking_wheel, // horizontal tracking wheel 1
@@ -129,8 +130,6 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         angular_controller, // angular PID settings
                         sensors // odometry sensors
 );
-
-pros::AIVision aivision(10);
 
 void screen_task_function() {
 
@@ -183,31 +182,30 @@ void AprilTag_move_to_score(int goal_Number, int direction) {
     float delta_y;
     float delta_x;
 
-    int scoring_x = goals[goal_Number].Goal_x;
-    int scoring_y = goals[goal_Number].Goal_y;
+    float scoring_x = goals[goal_Number].Goal_x;
+    float scoring_y = goals[goal_Number].Goal_y;
     int scoring_angle;
     
     //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
     if(direction==NORTH){
-    scoring_y += SCORING_DIST;
-    scoring_angle = 0;
+        scoring_y += SCORING_DIST;
+        scoring_angle = 0;
     }
     if(direction==SOUTH){
-    scoring_y -= SCORING_DIST;
-    scoring_angle = 180;
+        scoring_y -= SCORING_DIST;
+        scoring_angle = 180;
     }
     if(direction==EAST){
-    scoring_x += SCORING_DIST;
-    scoring_angle = 90;
+        scoring_x += SCORING_DIST;
+        scoring_angle = 90;
     }
     if(direction==WEST){
-    scoring_x -= SCORING_DIST;
-    scoring_angle = -90;
+        scoring_x -= SCORING_DIST;
+        scoring_angle = -90;
     }
 
     auto objects = aivision.get_all_objects();
         
-
     for(int i=0;i<10;i++){
         if(!objects.empty()) {
             break;
@@ -218,7 +216,7 @@ void AprilTag_move_to_score(int goal_Number, int direction) {
         return;
         }
         pros::delay(50);
-        auto objects = aivision.get_all_objects();
+        objects = aivision.get_all_objects();
 
     }
  
@@ -239,13 +237,12 @@ void AprilTag_move_to_score(int goal_Number, int direction) {
     chassis.setPose(scoring_x+delta_x,scoring_y+delta_y, chassis.getPose().theta);
     chassis.moveToPose(scoring_x,scoring_y, scoring_angle, 3000, {.forwards = false});
     
-    
 }
 
 void Score_In_Goal(int goal_Number, int direction) {
 
-    int align_x = goals[goal_Number].Goal_x;
-    int align_y = goals[goal_Number].Goal_y;
+    float align_x = goals[goal_Number].Goal_x;
+    float align_y = goals[goal_Number].Goal_y;
     int align_angle;
     
     //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
@@ -287,7 +284,8 @@ void Score_In_Goal(int goal_Number, int direction) {
     /*Scoring_Rollers.move(-127);
     pros::delay(1000);
     Scoring_Rollers.move(0);
-*/}
+*/
+}
 
 extern const char* auto_names[] = {"auto_1", "auto_2"};
 extern const int auton_count = 2;
@@ -349,14 +347,14 @@ void initialize() {
     controller.clear();
     pros::delay(50);                       
     //controller.set_text(0,0,"Hi Andrew");
-    auton_selector();
-
     chassis.calibrate(); // calibrate sensors
+    chassis.setPose (0,0,0);
+    
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
-    chassis.setPose (0,0,0);
-
+    auton_selector();
+    
 }
 
 /**
