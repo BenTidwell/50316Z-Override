@@ -13,6 +13,16 @@ float AprilTag_Angle_Trim = lemlib::degToRad(3.8);  // adjust for difference in 
 float AprilTag_X_offset = 0.0f;
 float AprilTag_Y_offset =  -2.0f;
 
+//Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
+struct Tag_Detection
+{
+   float Distance_To_AprilTag_In;
+   float Robot_to_AprilTag_Angle;
+   float Pixel_width;
+   int Tag_ID;
+   bool Tag_Valid; 
+};
+
 //Structure that we will use for moving to each goal using AprilTags
 struct Goal_Info
 {
@@ -34,15 +44,8 @@ Goal_Info goals[9] = {
     {46.66,117.30,5.77,4}
 };
 
-//Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
-struct Tag_Detection
-{
-   float Distance_To_AprilTag_In;
-   float Robot_to_AprilTag_Angle;
-   float Pixel_width;
-   int Tag_ID;
-   bool Tag_Valid; 
-};
+
+
 
 Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Tag_Detection Outcome;
@@ -61,38 +64,34 @@ Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     return Outcome;
 }
 
-pros::MotorGroup left_motors({-2,-6}, pros::MotorGearset::blue); // left motors on ports 2 and 6
-pros::MotorGroup right_motors({9,5}, pros::MotorGearset::blue); // right motors on ports 5 and 9
+pros::MotorGroup left_motors({-6,-15}, pros::MotorGearset::blue); // left motors on ports 2 and 6
+pros::MotorGroup right_motors({10,5}, pros::MotorGearset::blue); // right motors on ports 5 and 9
 pros::Controller controller(pros::E_CONTROLLER_MASTER); 
 // drivetrain settings
 lemlib::Drivetrain drivetrain(&left_motors, // left motor group
                               &right_motors, // right motor group
                               10, // 10 inch track width
-                              lemlib::Omniwheel::NEW_275, // using new 2.75" omnis
+                              lemlib::Omniwheel::NEW_275, // using new 3.25" omnis
                               450, // drivetrain rpm is 450
                               2 // horizontal drift is 2 (for now)
 );
 
-pros::MotorGroup liftMotors({-3,8}, pros::MotorGearset::green);
-pros::Motor wristMotor({4}, pros::MotorGearset::green);
-pros::Motor Scoring_Rollers({18}, pros::MotorGearset::green);
-
+pros::MotorGroup liftMotors({3,-7}, pros::MotorGearset::green,pros::v5::MotorEncoderUnits::degrees);
+pros::Motor wristMotor({1}, pros::MotorGearset::green,pros::v5::MotorEncoderUnits::degrees);
+pros::Motor Scoring_Rollers({11}, pros::MotorGearset::green,pros::v5::MotorEncoderUnits::degrees);
+pros::Motor Intake_Rollers({17}, pros::MotorGearset::blue,pros::v5::MotorEncoderUnits::degrees);
 
 // create an imu on port 15
-pros::Imu imu(15);
-// create distance sensor
-// pros::Distance scoring_dist_sensor(5); 
-
+pros::Imu imu(9);
+//pros::Distance scoring_dist_sensor(5); 
 // create a v5 rotation sensor on ports 19 & 20
-pros::Rotation vert_rotation_sensor(19);
-pros::Rotation horv_rotation_sensor(20);
-
-// create a vision sensor
-pros::AIVision aivision(10);
-
-// tracking wheels
+pros::Rotation vert_rotation_sensor(13);
+pros::Rotation horv_rotation_sensor(2);
+// vertical tracking wheel
 lemlib::TrackingWheel vertical_tracking_wheel(&vert_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
 lemlib::TrackingWheel horizontal_tracking_wheel(&horv_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
+
+
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
                             nullptr, // vertical tracking wheel 2, set to nullptr as we are using IMEs
                             &horizontal_tracking_wheel, // horizontal tracking wheel 1
@@ -130,6 +129,8 @@ lemlib::Chassis chassis(drivetrain, // drivetrain settings
                         angular_controller, // angular PID settings
                         sensors // odometry sensors
 );
+
+pros::AIVision aivision(12);
 
 void screen_task_function() {
 
@@ -188,24 +189,25 @@ void AprilTag_move_to_score(int goal_Number, int direction) {
     
     //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
     if(direction==NORTH){
-        scoring_y += SCORING_DIST;
-        scoring_angle = 0;
+    scoring_y += SCORING_DIST;
+    scoring_angle = 0;
     }
     if(direction==SOUTH){
-        scoring_y -= SCORING_DIST;
-        scoring_angle = 180;
+    scoring_y -= SCORING_DIST;
+    scoring_angle = 180;
     }
     if(direction==EAST){
-        scoring_x += SCORING_DIST;
-        scoring_angle = 90;
+    scoring_x += SCORING_DIST;
+    scoring_angle = 90;
     }
     if(direction==WEST){
-        scoring_x -= SCORING_DIST;
-        scoring_angle = -90;
+    scoring_x -= SCORING_DIST;
+    scoring_angle = -90;
     }
 
     auto objects = aivision.get_all_objects();
         
+
     for(int i=0;i<10;i++){
         if(!objects.empty()) {
             break;
@@ -237,12 +239,13 @@ void AprilTag_move_to_score(int goal_Number, int direction) {
     chassis.setPose(scoring_x+delta_x,scoring_y+delta_y, chassis.getPose().theta);
     chassis.moveToPose(scoring_x,scoring_y, scoring_angle, 3000, {.forwards = false});
     
+    
 }
 
 void Score_In_Goal(int goal_Number, int direction) {
 
-    float align_x = goals[goal_Number].Goal_x;
-    float align_y = goals[goal_Number].Goal_y;
+    int align_x = goals[goal_Number].Goal_x;
+    int align_y = goals[goal_Number].Goal_y;
     int align_angle;
     
     //Sets the x and y to move to the goal that is depicted by the goal number - score on the face from direction
@@ -284,8 +287,7 @@ void Score_In_Goal(int goal_Number, int direction) {
     /*Scoring_Rollers.move(-127);
     pros::delay(1000);
     Scoring_Rollers.move(0);
-*/
-}
+*/}
 
 extern const char* auto_names[] = {"auto_1", "auto_2"};
 extern const int auton_count = 2;
@@ -311,13 +313,13 @@ void auton_selector() {
 
     while (true)
     {
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT))
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_LEFT))
         {
             selected_auto = (selected_auto - 1 + auton_count) % auton_count;
             pros::delay(100);  
         }
 
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT))
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_RIGHT))
         {
             selected_auto = (selected_auto + 1) % auton_count;
             pros::delay(100);
@@ -347,14 +349,14 @@ void initialize() {
     controller.clear();
     pros::delay(50);                       
     //controller.set_text(0,0,"Hi Andrew");
+    auton_selector();
+
     chassis.calibrate(); // calibrate sensors
-    chassis.setPose (0,0,0);
-    
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
-    auton_selector();
-    
+    chassis.setPose (0,0,0);
+
 }
 
 /**
@@ -415,24 +417,45 @@ void autonomous() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+    
+    //when in competition move this to the auto
+    //this moves the lift up a little so it is ready to intake
+    liftMotors.tare_position();
+    liftMotors.move_absolute(900,127);
+    wristMotor.move(-127);
+    pros::delay(500);
+    wristMotor.move(0);
+    wristMotor.tare_position();
+    //liftMotors.move(127); // <--
+    //pros::delay(600);     // <--
 
-//controller.set_text(2,0,"Hi Andrew");
-//pros::delay(50);        
-//controller.set_text(1,0,auto_names[selected_auto]);
+    Scoring_Rollers.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+    wristMotor.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
+
+    enum class  MacroStates {
+        FLOOR_AND_LOADER_INTAKE,
+        READY_TO_SCORE,
+        READY_TO_STACK_INTAKE,
+        STACK_INTAKE,
+        LIFT_STATES,
+        SCORE,
+        LIFT_RESET,
+        IDLE
+    };
+
+    MacroStates state = MacroStates::IDLE;
+
+    int lift_level = 0; // for Lift state state
+    int Max_Height = 5;  // for lift states
+    u_int32_t timer = pros::millis(); // timer for state changes
+    float ypos_for_states; //for resetting lift after scoring and backing up
 
     while (true) {
-
-        Scoring_Rollers.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-        // controller.set_text(0,0,"The chosen: ");
-        //controller.set_text(2,0,"Hi Andrew");
-
-        //controller.set_text(1,0,auto_names[selected_auto]);       
         
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_B) && 
-            controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)){
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y) && 
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)){
                 autonomous();
         }
-        
         
         // get left y and right x positions
         int leftY = controller.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
@@ -440,31 +463,100 @@ void opcontrol() {
 
         // move the robot
         chassis.arcade(leftY, rightX);
-/*
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) {
-            Scoring_Rollers.move(127); // Move full speed up
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) {
-            Scoring_Rollers.move(-127); // Move full speed down
-        } else {
-            Scoring_Rollers.move(0); // Stop moving motors
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) 
+            state = MacroStates::FLOOR_AND_LOADER_INTAKE;
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) 
+            state = MacroStates::IDLE;
+        
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) 
+            state = MacroStates::READY_TO_STACK_INTAKE;
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) 
+            state = MacroStates::STACK_INTAKE;
+
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP))
+            {
+                state = MacroStates::LIFT_STATES;
+                if (lift_level < Max_Height)
+            {
+                lift_level += 1;
+            } 
+            }
+
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN))
+        {        
+            state = MacroStates::LIFT_STATES;
+            
+            if (lift_level >=1)
+            {
+                lift_level -= 1;
+            }
         }
 
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_UP)) {
-            liftMotors.move(127); // Move full speed up
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_DOWN)) {
-            liftMotors.move(-127); // Move full speed down
-        } else {
-            liftMotors.move(0); // Stop moving motors
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A))
+        {
+            state = MacroStates::SCORE;
+        }
+        
+        switch (state)
+        {
+        case MacroStates::IDLE:
+            Intake_Rollers.move(0);
+            Scoring_Rollers.move(0); 
+            break;
+        
+        case MacroStates::FLOOR_AND_LOADER_INTAKE:
+            liftMotors.move_absolute(900,127);
+            wristMotor.move_absolute(40,127);
+            Intake_Rollers.move(-127);
+            Scoring_Rollers.move(127); 
+            break;
+
+        case MacroStates::READY_TO_STACK_INTAKE:
+            Intake_Rollers.move(0);
+            Scoring_Rollers.move(0);
+            liftMotors.move_absolute(0,127);
+            wristMotor.move_absolute(630,127);
+            break;
+
+        case MacroStates::STACK_INTAKE:
+            Scoring_Rollers.move(127);
+            wristMotor.move_absolute(240,127);
+            pros::delay(500);
+            wristMotor.move_absolute(360,127);
+            state = MacroStates::IDLE;
+            break;
+
+        case MacroStates::SCORE:
+            Scoring_Rollers.move(-127);
+            pros::delay(150);
+            Scoring_Rollers.move(0);
+            wristMotor.move_absolute(540,127);
+            ypos_for_states = vertical_tracking_wheel.getDistanceTraveled();
+            state = MacroStates::LIFT_RESET;
+            break;
+
+        case MacroStates::LIFT_RESET:
+            if(fabs(vertical_tracking_wheel.getDistanceTraveled() - ypos_for_states) > 8)
+            {
+                liftMotors.move_absolute(900,127);
+                wristMotor.move_absolute(40,127);
+                state = MacroStates::IDLE;
+            }
+            break;
+
+        case MacroStates::LIFT_STATES:
+            
+            wristMotor.move_absolute(360,127);
+            Intake_Rollers.move(0);
+            Scoring_Rollers.move(127);
+            liftMotors.move_absolute(900*lift_level,127);
+
+            break;
         }
 
-         if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) {
-            wristMotor.move(127); // Move full speed up
-        } else if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) {
-            wristMotor.move(-127); // Move full speed down
-        } else {
-            wristMotor.move(0); // Stop moving motors
-        }
-  */     
         // delay to save resources
         pros::delay(25);                            // Run for 20 ms then update
     }
