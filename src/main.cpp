@@ -421,7 +421,7 @@ void opcontrol() {
     //when in competition move this to the auto
     //this moves the lift up a little so it is ready to intake
     liftMotors.tare_position();
-    liftMotors.move_absolute(900,127);
+    liftMotors.move_absolute(350,127);
     wristMotor.move(-127);
     pros::delay(500);
     wristMotor.move(0);
@@ -508,7 +508,7 @@ void opcontrol() {
             break;
         
         case MacroStates::FLOOR_AND_LOADER_INTAKE:
-            liftMotors.move_absolute(900,127);
+            liftMotors.move_absolute(300,127);
             wristMotor.move_absolute(40,127);
             Intake_Rollers.move(-127);
             Scoring_Rollers.move(127); 
@@ -541,7 +541,7 @@ void opcontrol() {
         case MacroStates::LIFT_RESET:
             if(fabs(vertical_tracking_wheel.getDistanceTraveled() - ypos_for_states) > 8)
             {
-                liftMotors.move_absolute(900,127);
+                liftMotors.move_absolute(350,127);
                 wristMotor.move_absolute(40,127);
                 state = MacroStates::IDLE;
             }
@@ -552,7 +552,7 @@ void opcontrol() {
             wristMotor.move_absolute(360,127);
             Intake_Rollers.move(0);
             Scoring_Rollers.move(127);
-            liftMotors.move_absolute(900*lift_level,127);
+            liftMotors.move_absolute(350*lift_level,127);
 
             break;
         }
