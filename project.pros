@@ -636,7 +636,8 @@
     },
     "upload_options": {
       "description": "Lemlib cooking",
-      "icon": "X"
+      "icon": "X",
+      "slot": 1
     },
     "use_early_access": false
   }

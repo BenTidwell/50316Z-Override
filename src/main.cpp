@@ -7,11 +7,43 @@
 #define SOUTH 3
 #define WEST 4
 
+
+pros::adi::DigitalOut lift_intake('A'); 
 float Focal_Length = 172; //Constant for AprilTag proccesing
 float April_Tag_Size = 1.0f; //This describes what the size in inches the AprilTag is, as it can change in size every year
 float AprilTag_Angle_Trim = lemlib::degToRad(3.8);  // adjust for difference in angle between robot and sensor
 float AprilTag_X_offset = 0.0f;
 float AprilTag_Y_offset =  -2.0f;
+lemlib::PID Lift_Pid(0,0,0,0,false);
+int lift_target = 0;
+int intake_height = 245;  // starting height and intake height
+int intake_on_off = 0;
+int controller_enable = 1;
+int color_is_blue = 0;
+int first_lift = 1;
+
+void left_button_pressed() {color_is_blue = 0; pros::screen::set_eraser(0x00FF0000); pros::screen::erase();}
+void right_button_pressed() {color_is_blue = 1; pros::screen::set_eraser(0x000000FF); pros::screen::erase();}
+
+enum class  MacroStates {
+        LIFTING_INTAKE,
+        FLOOR_AND_LOADER_INTAKE,
+        FLOOR_AND_LOADER_OUTAKE,
+        READY_TO_SCORE,
+        READY_TO_STACK_INTAKE,
+        STACK_INTAKE,
+        LIFT_STATES,
+        SCORE,
+        LIFT_RESET,
+        IDLE
+};
+
+int lift_level = 1; // for Lift state state
+int Max_Height = 9;  // for lift states
+u_int32_t timer = pros::millis(); // timer for state changes
+float ypos_for_states; //for resetting lift after scoring and backing up
+MacroStates state = MacroStates::IDLE;
+int lift_heights[12]={0,175,515,725,1100,1275,1600,1850,2200,2350,2500,2750};
 
 //Structure we will use later for a bunch of variables needed for AprilTag proccesing. 
 struct Tag_Detection
@@ -43,9 +75,6 @@ Goal_Info goals[9] = {
     {93.75,117.30,3.25,3},
     {46.66,117.30,5.77,4}
 };
-
-
-
 
 Tag_Detection AprilTagProccesing (const auto& AprilTag_Object){
     Tag_Detection Outcome;
@@ -87,9 +116,13 @@ pros::Imu imu(9);
 // create a v5 rotation sensor on ports 19 & 20
 pros::Rotation vert_rotation_sensor(13);
 pros::Rotation horv_rotation_sensor(2);
+pros::Rotation lift_rotation_sensor(14);
+pros::Distance lift_intake_sensor(8);
+pros::Optical left_color_sensor(18);
+pros::Optical right_color_sensor(19);
 // vertical tracking wheel
 lemlib::TrackingWheel vertical_tracking_wheel(&vert_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
-lemlib::TrackingWheel horizontal_tracking_wheel(&horv_rotation_sensor, lemlib::Omniwheel::NEW_2, .2);
+lemlib::TrackingWheel horizontal_tracking_wheel(&horv_rotation_sensor, lemlib::Omniwheel::NEW_2, 2.25);
 
 
 lemlib::OdomSensors sensors(&vertical_tracking_wheel, // vertical tracking wheel 1, set to null
@@ -140,15 +173,16 @@ void screen_task_function() {
 
     while (true) {
         // print robot location to the brain screen
-        pros::lcd::print(0, "X: %f", chassis.getPose().x); // x
-        pros::lcd::print(1, "Y: %f", chassis.getPose().y); // y
-        pros::lcd::print(2, "Theta: %f", chassis.getPose().theta); // heading
+        pros::lcd::print(0, "X: %f dist_intake: %d", chassis.getPose().x, lift_intake_sensor.get_distance()); // x
+        pros::lcd::print(1, "Y: %f proximity: %d", chassis.getPose().y, left_color_sensor.get_proximity()); // y
+        pros::lcd::print(2, "Theta: %f color_is_blue: %d", chassis.getPose().theta, color_is_blue); // heading
             
         auto objects = aivision.get_all_objects();
 
         if(objects.empty()) {
             pros::lcd::print(3,"tag\n");
             pros::lcd::print(4,"id %d\n");
+
             pros::lcd::print(7,"distance:     valid?   RtTA:     \n");
         }
         else {
@@ -297,8 +331,74 @@ void auto_1() {
 
     //chassis.moveToPose(0, 40, 0, 3000);
     //chassis.waitUntilDone();
-    chassis.setPose(61,-7,180);
-    Score_In_Goal(3,EAST);
+    
+    //chassis.setPose(61,-7,180);
+    //Score_In_Goal(3,EAST);
+
+// chassis.setPose(135,72,90);
+
+chassis.setPose(70,9,180);
+
+state = MacroStates::IDLE;
+
+pros::delay(1000);
+
+lift_level = 0;
+state = MacroStates::LIFT_STATES;
+
+chassis.moveToPoint(70,22,3000,{.forwards = false});
+chassis.waitUntilDone();
+
+chassis.turnToHeading(-90, 1000);
+
+chassis.moveToPoint(85,24,3000,{.forwards = false});
+pros::delay(1000);
+state = MacroStates::SCORE;
+pros::delay(1000);
+chassis.waitUntilDone();
+
+
+/*
+chassis.moveToPoint(124,72,3000);
+chassis.waitUntilDone();
+
+chassis.turnToHeading(-135, 1000);
+
+chassis.moveToPoint(124,72,3000);
+chassis.waitUntilDone();
+
+chassis.moveToPoint(110,61,3000);
+chassis.waitUntilDone();
+
+state = MacroStates::LIFTING_INTAKE;
+
+chassis.arcade(20,0);
+
+while (state != MacroStates::FLOOR_AND_LOADER_INTAKE)
+{
+    pros::delay(25);
+}
+
+chassis.cancelAllMotions();
+chassis.arcade(0,0);
+pros::delay(2000);
+chassis.turnToHeading(-45, 1000);
+
+lift_level = 2;
+state = MacroStates::LIFT_STATES;
+
+chassis.moveToPoint(120,57,1000,{.forwards = false, .maxSpeed = 100});
+chassis.waitUntilDone();
+
+state = MacroStates::SCORE;
+pros::delay(1000);
+
+*/
+
+/*chassis.moveToPoint(72,68,3000);
+chassis.waitUntilDone();
+*/
+
 }
 
 void auto_2() {
@@ -342,20 +442,152 @@ void auton_selector() {
     }
 }
 
+void macro_state() {
+    while (true) {
+        switch (state)
+        {
+        case MacroStates::IDLE:
+            Scoring_Rollers.move(0);
+            if (color_is_blue == 1)
+            {
+                if (((left_color_sensor.get_hue()<120) && left_color_sensor.get_proximity()>=255) || 
+                (right_color_sensor.get_hue()<120 && right_color_sensor.get_proximity()>=255)) {
+                    Intake_Rollers.move(100);
+                } else {
+                    Intake_Rollers.move(0);
+                }
+            } else {
+                if ((((left_color_sensor.get_hue()<330) && (left_color_sensor.get_hue()>35)) && left_color_sensor.get_proximity()>=255) 
+                || (((right_color_sensor.get_hue()<330) && (right_color_sensor.get_hue()>35)) && right_color_sensor.get_proximity()>=255)) {
+                    Intake_Rollers.move(100);
+                } else {
+                    Intake_Rollers.move(0);
+                }
+            }
+                        
+            lift_intake.set_value(false); 
+            break;
+
+        case MacroStates::LIFTING_INTAKE:
+    
+            liftMotors.move_absolute(intake_height,127);
+            wristMotor.move_absolute(35,127);
+            pros::delay(50);
+            lift_intake.set_value(true);
+            Intake_Rollers.move(-127);
+            Scoring_Rollers.move(127);
+            
+            if(lift_intake_sensor.get_distance() <= 200){
+               controller_enable = 0;
+               chassis.arcade(-127,0);
+               pros::delay(100);
+               chassis.cancelMotion();
+               lift_intake.set_value(false);
+               intake_on_off = 1;
+               state = MacroStates::FLOOR_AND_LOADER_INTAKE;
+               controller_enable = 1;
+            }
+            break; 
+                        
+        case MacroStates::FLOOR_AND_LOADER_INTAKE:
+            liftMotors.move_absolute(intake_height,127);
+            wristMotor.move_absolute(35,127);
+            Intake_Rollers.move(-127*intake_on_off); 
+            Scoring_Rollers.move(127);
+            pros::delay(50);
+            if(abs(Intake_Rollers.get_actual_velocity())<20) {
+                Intake_Rollers.move(127*intake_on_off);
+                pros::delay(100);
+                Intake_Rollers.move(-127*intake_on_off);
+            }
+            break;
+
+        case MacroStates::FLOOR_AND_LOADER_OUTAKE:
+            liftMotors.move_absolute(intake_height,127);
+            wristMotor.move_absolute(25,127);
+            Intake_Rollers.move(127);
+            Scoring_Rollers.move(-127); 
+            break;
+
+        case MacroStates::READY_TO_STACK_INTAKE:
+            Intake_Rollers.move(0);
+            Scoring_Rollers.move(0);
+            wristMotor.move_absolute(630,127);
+            pros::delay(0);                        // Add delay if needed
+            liftMotors.move_absolute(0,127);
+            break;
+
+        case MacroStates::STACK_INTAKE:
+            Scoring_Rollers.move(127);
+            wristMotor.move_absolute(240,127);
+            pros::delay(500);
+            wristMotor.move_absolute(360,127);
+            state = MacroStates::IDLE;
+            break;
+
+        case MacroStates::SCORE:
+            Scoring_Rollers.move(-127);
+            pros::delay(150);
+            Scoring_Rollers.move(0);
+            wristMotor.move_absolute(540,127);
+            ypos_for_states = vertical_tracking_wheel.getDistanceTraveled();
+            state = MacroStates::LIFT_RESET;
+            break;
+
+        case MacroStates::LIFT_RESET:
+            if(fabs(vertical_tracking_wheel.getDistanceTraveled() - ypos_for_states) > 8)
+            {
+                liftMotors.move_absolute(intake_height,127);
+                wristMotor.move_absolute(40,127);
+                state = MacroStates::IDLE;
+            }
+            break;
+
+        case MacroStates::LIFT_STATES:
+            
+            lift_intake.set_value(false);
+            wristMotor.move_absolute(375,127);
+            Intake_Rollers.move(0);
+            Scoring_Rollers.move(15);
+            liftMotors.move_absolute(lift_heights[lift_level],127);
+            break;
+    }
+
+    pros::delay(25);
+    }
+}   
+
+/*void lift_pid() {
+
+    int lift_target = (lift_heights[lift_level],127);
+    
+    float lift_error = (lift_target-lift_rotation_sensor.get_position());
+     
+    float power = lift.update(lift_error);
+
+}
+*/
+
 void initialize() {
     pros::lcd::initialize();
-    //pros::lcd::set_text(1, "Hello PROS User!");
 
+    pros::lcd::register_btn0_cb(left_button_pressed);
+    pros::lcd::register_btn2_cb(right_button_pressed);
+    left_color_sensor.set_led_pwm(100);
+    right_color_sensor.set_led_pwm(100);
+    
     controller.clear();
     pros::delay(50);                       
     //controller.set_text(0,0,"Hi Andrew");
-    auton_selector();
+    //auton_selector();
 
     chassis.calibrate(); // calibrate sensors
     // print position to brain screen
     static pros::Task screen_task = pros::Task(screen_task_function);
 
     chassis.setPose (0,0,0);
+
+    static pros::Task macro_task(macro_state);
 
 }
 
@@ -389,7 +621,19 @@ void competition_initialize() {}
  * from where it left off.
  */
 void autonomous() {
+
+    liftMotors.tare_position();
+    liftMotors.move_absolute(intake_height,127);
+    wristMotor.move(-127);
+    pros::delay(50);
+    wristMotor.move(0);
+    wristMotor.tare_position();
     
+    auto_1();
+
+}
+
+    /*
     switch(selected_auto) {
         case 0: 
             auto_1();
@@ -401,7 +645,9 @@ void autonomous() {
             controller.set_text(0,0,"Err: Auto Sel");
 
     }
-}  
+            */
+ 
+
 
 /**
  * Runs the operator control code. This function will be started in its own task
@@ -418,41 +664,25 @@ void autonomous() {
  */
 void opcontrol() {
     
-    //when in competition move this to the auto
-    //this moves the lift up a little so it is ready to intake
-    liftMotors.tare_position();
-    liftMotors.move_absolute(350,127);
-    wristMotor.move(-127);
-    pros::delay(500);
-    wristMotor.move(0);
-    wristMotor.tare_position();
-    //liftMotors.move(127); // <--
-    //pros::delay(600);     // <--
-
     Scoring_Rollers.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-    wristMotor.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);
-
-    enum class  MacroStates {
-        FLOOR_AND_LOADER_INTAKE,
-        READY_TO_SCORE,
-        READY_TO_STACK_INTAKE,
-        STACK_INTAKE,
-        LIFT_STATES,
-        SCORE,
-        LIFT_RESET,
-        IDLE
-    };
-
-    MacroStates state = MacroStates::IDLE;
-
-    int lift_level = 0; // for Lift state state
-    int Max_Height = 5;  // for lift states
-    u_int32_t timer = pros::millis(); // timer for state changes
-    float ypos_for_states; //for resetting lift after scoring and backing up
+    wristMotor.set_brake_mode(pros::E_MOTOR_BRAKE_HOLD);    
 
     while (true) {
         
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y) && 
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_B))
+        {
+            if (color_is_blue == 1)
+            {
+                color_is_blue = 0;
+            } else {
+                color_is_blue = 1;
+            }
+            
+        }
+    
+
+        if (!pros::competition::is_connected() &&
+            controller.get_digital(pros::E_CONTROLLER_DIGITAL_Y) && 
             controller.get_digital(pros::E_CONTROLLER_DIGITAL_RIGHT)){
                 autonomous();
         }
@@ -462,103 +692,95 @@ void opcontrol() {
         int rightX = controller.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
 
         // move the robot
-        chassis.arcade(leftY, rightX);
-
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L1)) 
-            state = MacroStates::FLOOR_AND_LOADER_INTAKE;
-
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2)) 
-            state = MacroStates::IDLE;
-        
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R1)) 
-            state = MacroStates::READY_TO_STACK_INTAKE;
-
-        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_R2)) 
-            state = MacroStates::STACK_INTAKE;
-
-        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_UP))
+        if (controller_enable == 1){
+            if(state == MacroStates::LIFTING_INTAKE && leftY > 20)
             {
-                state = MacroStates::LIFT_STATES;
-                if (lift_level < Max_Height)
+                chassis.arcade(20,rightX);
+            } else {
+                chassis.arcade(leftY, rightX);
+            }
+        }
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_L2))
+            state = MacroStates::LIFTING_INTAKE;
+
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_L1)) {
+            if (state != MacroStates::FLOOR_AND_LOADER_INTAKE)
             {
-                lift_level += 1;
-            } 
+                intake_on_off = 1;
+            } else {
+                if (intake_on_off == 0) {
+                    intake_on_off = 1; 
+                } else if (intake_on_off == -1) {
+                    intake_on_off = 1; 
+                } else if (intake_on_off == 1) {
+                    intake_on_off = -1; 
+                }
             }
 
-        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_DOWN))
-        {        
-            state = MacroStates::LIFT_STATES;
+            lift_intake.set_value(false);
+            state = MacroStates::FLOOR_AND_LOADER_INTAKE;
+        }
+
+        if (controller.get_digital(pros::E_CONTROLLER_DIGITAL_LEFT))  {
+            intake_on_off = 0;
+            state = MacroStates::IDLE;
+        }
+        
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R1))
+        {
+            if (lift_level < Max_Height)
+            {
+                lift_level += 1;
+            }
             
-            if (lift_level >=1)
+            if(state != MacroStates::LIFT_STATES && lift_level == 1)
+                lift_level = 2;
+            state = MacroStates::LIFT_STATES;
+
+            first_lift = 0;
+        }
+
+        if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_R2))
+        {        
+
+            state = MacroStates::LIFT_STATES;
+
+            if (first_lift == 1)
+            {
+                lift_level = 1;
+                pros::delay(500);
+                wristMotor.move_absolute(375,127);
+                lift_level = 0;
+            }
+            
+            if (lift_level >= 1)
             {
                 lift_level -= 1;
             }
+
+            first_lift = 0;
         }
 
         if (controller.get_digital_new_press(pros::E_CONTROLLER_DIGITAL_A))
         {
             state = MacroStates::SCORE;
-        }
+        }        
+
         
-        switch (state)
-        {
-        case MacroStates::IDLE:
-            Intake_Rollers.move(0);
-            Scoring_Rollers.move(0); 
-            break;
-        
-        case MacroStates::FLOOR_AND_LOADER_INTAKE:
-            liftMotors.move_absolute(300,127);
-            wristMotor.move_absolute(40,127);
-            Intake_Rollers.move(-127);
-            Scoring_Rollers.move(127); 
-            break;
-
-        case MacroStates::READY_TO_STACK_INTAKE:
-            Intake_Rollers.move(0);
-            Scoring_Rollers.move(0);
-            liftMotors.move_absolute(0,127);
-            wristMotor.move_absolute(630,127);
-            break;
-
-        case MacroStates::STACK_INTAKE:
-            Scoring_Rollers.move(127);
-            wristMotor.move_absolute(240,127);
-            pros::delay(500);
-            wristMotor.move_absolute(360,127);
-            state = MacroStates::IDLE;
-            break;
-
-        case MacroStates::SCORE:
-            Scoring_Rollers.move(-127);
-            pros::delay(150);
-            Scoring_Rollers.move(0);
-            wristMotor.move_absolute(540,127);
-            ypos_for_states = vertical_tracking_wheel.getDistanceTraveled();
-            state = MacroStates::LIFT_RESET;
-            break;
-
-        case MacroStates::LIFT_RESET:
-            if(fabs(vertical_tracking_wheel.getDistanceTraveled() - ypos_for_states) > 8)
-            {
-                liftMotors.move_absolute(350,127);
-                wristMotor.move_absolute(40,127);
-                state = MacroStates::IDLE;
-            }
-            break;
-
-        case MacroStates::LIFT_STATES:
-            
-            wristMotor.move_absolute(360,127);
-            Intake_Rollers.move(0);
-            Scoring_Rollers.move(127);
-            liftMotors.move_absolute(350*lift_level,127);
-
-            break;
-        }
+    controller.set_text(2,0," I " + std::to_string((int)Intake_Rollers.get_temperature()) + " " + (color_is_blue == 1 ? "Blue" : "Red "));
+//    "D " + std::to_string(static_cast<int>(std::max(
+    //std::max(std::max(drivetrain.leftMotors[0].get_temperature(), drivetrain.leftMotors[1].get_temperature()), drivetrain.leftMotors[1].get_temperature()),
+    //std::max(std::max(drivetrain.rightMotors[0].get_temperature(), drivetrain.rightMotors[1].get_temperature()), drivetrain.rightMotors[1].get_temperature())))) + 
+    
+    // controller.set_text(1,0, std::to_string ((int)color_is_blue) = (color_is_blue == 1) ? "Blue" : "Red ");
+    //  " - Over temp? " + (intake.is_over_temp() ? "YES" : "NO")););
+    // master.set_text(1,0,"Test2");
+    // master.set_text(2,0,"Test3");
 
         // delay to save resources
         pros::delay(25);                            // Run for 20 ms then update
     }
 }
+
 
